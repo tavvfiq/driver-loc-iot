@@ -1,11 +1,9 @@
 package driver
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/tavvfiq/driver-loc-iot/pkg/model"
@@ -15,38 +13,45 @@ import (
 var Topic = "driver-loc-iot"
 var clientId = "driver-iot"
 var BrokerUrl = "tcp://localhost:1883"
+var Qos = byte(2)
 
 type service struct {
-	client mymqtt.MyMqtt
+	driverId string
+	client   mymqtt.MyMqtt
 }
 
 // simulate location sending to mqtt
-func NewDriver() *service {
-	client := mymqtt.NewClient(clientId, BrokerUrl, 1)
-	return &service{client: client}
+func NewDriver(driverId string) *service {
+	myId := fmt.Sprintf("%s-%s", clientId, driverId)
+	client := mymqtt.NewClient(myId, BrokerUrl, Qos)
+	return &service{client: client, driverId: driverId}
 }
 
-func (s *service) Run() {
+func (s *service) Run(ctx context.Context) {
 	err := s.client.Connect()
 	if err != nil {
 		panic(err)
 	}
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 
 	for {
 		select {
-		case <-sig:
+		case <-ctx.Done():
 			s.client.Disconnect()
-			fmt.Println("driver-iot shutdown gracefully")
+			fmt.Printf("%s shutdown gracefully\n", s.driverId)
 			return
 		case <-time.After(10 * time.Second):
-			data := model.RawLocation{
+			loc := model.RawLocation{
 				Latitude:  1.23124323,
 				Longitude: 110.23123123,
 				Timestamp: time.Now(),
 			}
-			b, _ := json.Marshal(data)
+			payload := model.MQTTPayload{
+				Id:          "1",
+				OrderNumber: "RB-123",
+				DriverId:    s.driverId,
+				Location:    loc,
+			}
+			b, _ := json.Marshal(payload)
 			s.client.Publish(Topic, b)
 		}
 	}

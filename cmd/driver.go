@@ -5,7 +5,13 @@ Copyright © 2022 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/signal"
+	"strconv"
+	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/tavvfiq/driver-loc-iot/driver"
@@ -22,9 +28,33 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		numOfDrivers := 1
+		if args[0] != "" {
+			val, err := strconv.Atoi(args[0])
+			if err != nil {
+				fmt.Println("number of drivers must be a number of integers")
+				return
+			}
+			numOfDrivers = val
+		}
+		done := make(chan bool)
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			defer cancel()
+			<-sig
+			fmt.Println("cleaning up driver services...")
+			done <- true
+		}()
 		fmt.Println("running simulate driver")
-		d := driver.NewDriver()
-		d.Run()
+		for i := 0; i < numOfDrivers; i++ {
+			id := fmt.Sprintf("00%d", i+1)
+			d := driver.NewDriver(id)
+			go d.Run(ctx)
+		}
+		<-done
+		time.Sleep(2 * time.Second)
 	},
 }
 

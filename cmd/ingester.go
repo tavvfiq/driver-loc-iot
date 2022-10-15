@@ -6,9 +6,15 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
+	"strconv"
+	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
-	locingester "github.com/tavvfiq/driver-loc-iot/loc_ingester"
+	locingester "github.com/tavvfiq/driver-loc-iot/ingester"
+	"golang.org/x/net/context"
 )
 
 // ingesterCmd represents the ingester command
@@ -22,9 +28,33 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		numOfIngesters := 1
+		if args[0] != "" {
+			val, err := strconv.Atoi(args[0])
+			if err != nil {
+				fmt.Println("number of drivers must be a number of integers")
+				return
+			}
+			numOfIngesters = val
+		}
 		fmt.Println("running ingester")
-		d := locingester.NewIngester()
-		d.Run()
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan bool)
+		go func() {
+			<-sig
+			fmt.Println("cleaning up ingester service")
+			cancel()
+			done <- true
+		}()
+		for i := 0; i < numOfIngesters; i++ {
+			id := fmt.Sprintf("00%d", i+1)
+			d := locingester.NewIngester(id)
+			go d.Run(ctx)
+		}
+		<-done
+		time.Sleep(2 * time.Second)
 	},
 }
 

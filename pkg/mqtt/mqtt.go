@@ -7,7 +7,6 @@ import (
 )
 
 type MyMqtt interface {
-	SetConnectionHandler(handler mqtt.OnConnectHandler)
 	Connect() error
 	Disconnect()
 	Publish(topic string, payload []byte) error
@@ -16,12 +15,10 @@ type MyMqtt interface {
 }
 
 type service struct {
-	broker           string
-	clientId         string
-	client           mqtt.Client
-	qos              byte
-	connectedHandler mqtt.OnConnectHandler
-	connLostHandler  mqtt.ConnectionLostHandler
+	broker   string
+	clientId string
+	client   mqtt.Client
+	qos      byte
 }
 
 func NewClient(clientId string, broker string, qos byte) MyMqtt {
@@ -32,17 +29,11 @@ func NewClient(clientId string, broker string, qos byte) MyMqtt {
 	}
 }
 
-func (s *service) SetConnectionHandler(handler mqtt.OnConnectHandler) {
-	s.connectedHandler = handler
-}
-
 func (s *service) Connect() error {
 	options := mqtt.NewClientOptions()
 	// broker IP and port
 	options.AddBroker(s.broker)
 	options.SetClientID(s.clientId)
-	options.OnConnect = s.connectedHandler
-	options.OnConnectionLost = s.connLostHandler
 	client := mqtt.NewClient(options)
 	token := client.Connect()
 	if token.Wait() && token.Error() != nil {
@@ -67,7 +58,7 @@ func (s *service) Subscribe(topic string, handler mqtt.MessageHandler) error {
 	if token.Wait() && token.Error() != nil {
 		return token.Error()
 	}
-	fmt.Printf("subscribed to topic: %s with qos: %d\n", topic, s.qos)
+	fmt.Printf("client: %s subscribed to topic: %s with qos: %d\n", s.clientId, topic, s.qos)
 	return nil
 }
 
